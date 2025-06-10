@@ -221,3 +221,9 @@ nginx-hpa-hpa   Deployment/nginx-hpa   cpu: <unknown>/60%   1         5         
       - Service
       - Ingress
       - PVC
+
+# Desvantagens ❌
+- Performance ruim em clusters com muitas políticas e recursos
+- Limitações que com a linguagem Go você não teria
+- Pode ter inconsistência com a política de Geração caso recursos sejam apagados manualmente
+- Mensagens de erro às vezes não são tão claras
