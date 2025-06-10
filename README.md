@@ -15,6 +15,8 @@ helm repo update
 helm install kyverno kyverno/kyverno -n kyverno --create-namespace
 ```
 
+
+
 # Validação Kyverno
 Com um simples código YAML, podemos definir uma política de validação:
 ```yaml
@@ -36,8 +38,10 @@ spec:
       message: "NÃO usar LATEST na versão, para evitar bugs futuros"
       pattern:
         spec:
-          containers:
-          - image: "!*latest" # Bloqueia imagens que terminam com 'latest'
+          template:
+            spec:
+              containers:
+              - image: "!*:latest" # Bloqueia imagens que terminam com 'latest'
 ```
 
 Aqui temos um código simples que será implementado para o teste de validação:
@@ -69,4 +73,122 @@ resource Deployment/default/nginx-latest was blocked due to the following polici
 block-latest-version:
   validate-version: 'validation error: NÃO usar LATEST na versão, para evitar bugs
     futuros. rule validate-version failed at path /spec/containers/'
+```
+
+
+
+# Mutação Kyverno
+A mutação no Kyverno possibilita a edição de conteudo de algo criado
+```yaml
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: label-require
+spec:
+  validationFailureAction: Enforce
+  rules:
+  - name: add-stg-label
+    match:
+      resources:
+        kinds:
+        - Deployment
+    mutate:  # Mutação
+      patchStrategicMerge:
+        metadata:
+          labels:
+            team: stg # adiciona label no Deployment
+        spec:
+          selector:
+            matchLabels:
+              team: stg # adiciona label de conexão entre pod e deployment
+          template:
+            metadata:
+              labels:
+                team: stg # adiciona label no pod do deployment 
+```
+Exemplo de como ficaria um deployment com a mutação:
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-deployment-mutacao
+  # a policy vai adicionar: team: stg
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      # a policy vai adicionar: team: stg
+  template:
+    metadata:
+      labels:
+        # a policy vai adicionar: team: stg
+    spec:
+      containers:
+        - image: nginx:1.25
+          name: nginx
+```
+
+
+
+# Geração Kyverno
+A geração no Kyverno possibilita gerar novos recursos quando algo é criado
+```yaml
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: hpa-generate
+spec:
+  rules:
+  - name: generate-hpa
+    match: # Onde a política é aplicada
+      resources:
+        kinds:
+          - Deployment
+    preconditions: # A regra só é acionada se o Deployment tiver a label hpa_enabled: "true"
+      all:
+      - key: "{{ request.object.metadata.labels.hpa_enabled }}"
+        operator: Equals
+        value: "true"
+    generate: # Criação do HPA
+      kind: HorizontalPodAutoscaler
+      apiVersion: autoscaling/v2
+      name: "{{request.object.metadata.name}}-hpa"
+      namespace: "{{request.object.metadata.namespace}}"
+      synchronize: true # Atualiza o HPA caso o deployment seja modificado
+      data:
+        spec:
+          scaleTargetRef:
+            apiVersion: apps/v1
+            kind: Deployment
+            name: "{{request.object.metadata.name}}"
+          minReplicas: 1
+          maxReplicas: 5
+          metrics: # Escala com base na CPU (alvo de 60% de utilização)
+          - type: Resource
+            resource:
+              name: cpu
+              target:
+                type: Utilization
+                averageUtilization: 60
+```
+Código para ativar a política para criar o HPA
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-hpa
+  labels:
+    hpa_enabled: "true"  # Ativa a política
+spec:
+  replicas: 1
+  template:
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.25
+```
+### HPA gerado:
+```bash
+NAME            REFERENCE              TARGETS              MINPODS   MAXPODS   REPLICAS   AGE
+nginx-hpa-hpa   Deployment/nginx-hpa   cpu: <unknown>/60%   1         5         0          4s
 ```
