@@ -78,7 +78,7 @@ block-latest-version:
 
 
 # Mutação Kyverno
-A mutação no Kyverno possibilita a edição de conteudo de algo criado
+A mutação no Kyverno possibilita a edição de conteúdo de algo criado
 ```yaml
 apiVersion: kyverno.io/v1
 kind: ClusterPolicy
@@ -192,3 +192,32 @@ spec:
 NAME            REFERENCE              TARGETS              MINPODS   MAXPODS   REPLICAS   AGE
 nginx-hpa-hpa   Deployment/nginx-hpa   cpu: <unknown>/60%   1         5         0          4s
 ```
+
+
+# Vantagens de usar Kyverno ✅
+  ## Validação:
+  -  Definir uma tag padrão ou até mesmo proibir o latest como visto anteriormente
+  -  Evitar containers rodando como root
+  -  Bloquear uso de portas não autorizadas
+  - Garantir Labels
+  - Obrigar convenção de nomes (dev-*, prd-*)
+  - Definir limites de CPU/memória
+  - Impedir que usuários usem outros namespaces
+
+## Mutação:
+  - Adicionar labels automaticamente
+  - Renomear ou adicionar prefixos nos recursos criados (dev-)
+  - Injetar PodDisruptionBudget (evitar que todos os pods sejam reiniciados de uma só vez)
+  - Evita erros por omissão (storageClassName no PVC)
+  - Aplicar mudanças em geral
+
+## Geração
+  - Gerar recursos de forma automática como:
+      - HPA
+      - ConfigMap
+      - Secret
+      - ResourceQuota
+      - LimitRange
+      - Service
+      - Ingress
+      - PVC
