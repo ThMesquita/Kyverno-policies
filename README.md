@@ -193,6 +193,54 @@ NAME            REFERENCE              TARGETS              MINPODS   MAXPODS   
 nginx-hpa-hpa   Deployment/nginx-hpa   cpu: <unknown>/60%   1         5         0          4s
 ```
 
+# Tratar Exceções 🔓
+Aqui alguns exemplos de como gerar exceções às suas regras
+
+### Através de Namespace (direto no ClusterPolicy)
+```yaml
+rules:
+  - name: namespace-exception
+    match:
+      resources:
+        kinds:
+          - Deployment
+        namespaces:
+          - "!excluded-namespace"  # Retira namespace da política
+```
+
+### Adicionando condição (direto no ClusterPolicy)
+```yaml
+preconditions:
+  all:
+    - key: "{{ request.object.metadata.annotations.\"kyverno.io/ignore\" }}"
+      operator: NotEquals
+      value: "true"
+```
+A política não será aplicada:
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-dep
+  annotations:
+    kyverno.io/ignore: "true"  # Política vai ser ignorada
+```
+
+### [PolicyException](https://release-1-11-0.kyverno.io/docs/writing-policies/exceptions/)
+```yaml
+apiVersion: kyverno.io/v2alpha1
+kind: PolicyException
+metadata:
+  name: allow-legacy-apis
+spec:
+  policies: ["politica-block"]
+  rules: ["regra-politica-block"]
+  exceptions:
+    namespaces: ["prd"]     # Namespace não participará da regra acima 
+    resourceNames: ["nginx-pod"]  # Nome dos recursos que não participaram da regra
+
+```
+
 
 # Vantagens de usar Kyverno ✅
   ## Validação:
