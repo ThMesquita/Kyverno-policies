@@ -241,6 +241,139 @@ spec:
 
 ```
 
+# Exemplos de uso
+
+### Check deprecated APIs
+Avisa o usuário sobre APIs descontinuadas que estão sendo usadas
+```yaml
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: check-dep-api
+spec:
+  validationFailureAction: Audit
+  background: true # Verifica recursos existentes no cluster
+  rules:
+    - name: deprecated-api
+      match:
+        resources:
+          kinds:
+            - batch/*/CronJob
+            - discovery.k8s.io/*/EndpointSlice
+            - events.k8s.io/*/Event
+            - policy/*/PodDisruptionBudget
+            - policy/*/PodSecurityPolicy
+            - node.k8s.io/*/RuntimeClass
+            - networking.k8s.io/*/Ingress
+          namespaces:
+          - "!excluded-namespace" # Com exceção desse namespace
+      preconditions:
+        all:
+        - key: "{{ request.operation || 'BACKGROUND' }}"
+          operator: NotEquals
+          value: DELETE
+        - key: "{{request.object.apiVersion}}"
+          operator: AnyIn
+          value:
+          - batch/v1beta1
+          - discovery.k8s.io/v1beta1
+          - events.k8s.io/v1beta1
+          - policy/v1beta1
+          - node.k8s.io/v1beta1
+      validate:
+        message: >-
+          {{ request.object.apiVersion }}/{{ request.object.kind }} is deprecated and will be removed in v1.25. 
+          See: https://kubernetes.io/docs/reference/using-api/deprecation-guide/
+    - name: validate-v1-26-removals
+      match:
+        any:
+        - resources:
+            kinds:
+            - flowcontrol.apiserver.k8s.io/*/FlowSchema
+            - flowcontrol.apiserver.k8s.io/*/PriorityLevelConfiguration
+            - autoscaling/*/HorizontalPodAutoscaler
+      preconditions:
+        all:
+        - key: "{{ request.operation || 'BACKGROUND' }}"
+          operator: NotEquals
+          value: DELETE
+        - key: "{{request.object.apiVersion}}"
+          operator: AnyIn
+          value:
+          - flowcontrol.apiserver.k8s.io/v1beta1
+          - autoscaling/v2beta2
+      validate:
+        message: >-
+          {{ request.object.apiVersion }}/{{ request.object.kind }} is deprecated and will be removed in v1.26.
+          See: https://kubernetes.io/docs/reference/using-api/deprecation-guide/
+```
+
+### Require Limits and Requests
+Alerta que Memória e CPU não está preenchido
+```yaml
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-limits-request
+spec:
+  validationFailureAction: Audit
+  background: true
+  rules:
+  - name: validate-resources
+    match:
+      any:
+      - resources:
+          kinds:
+          - Pod
+    validate:
+      message: "Limites de CPU e Memória não definidos"
+      pattern:
+        spec:
+          containers:
+            - resources:
+                requests:
+                  memory: "?*"
+                  cpu: "?*"
+                limits:
+                  memory: "?*"
+                  cpu: "?*"
+```
+
+### Require Pod Probes
+Verifica se os Pods foram preenchidos com Probes
+```yaml
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: probes-policy
+spec:
+  validationFailureAction: Audit
+  background: true
+  rules:
+  - name: validate-probes
+    match:
+      any:
+      - resources:
+          kinds:
+            - Pod
+    validate:
+      message: "Liveness, readiness, ou startup probes precisam ser preenchidos"
+      foreach:
+      - list: request.object.spec.containers[]
+        deny: # Vai negar se os 3 forem verdadeiros
+          conditions:
+            all:
+            - key: livenessProbe
+              operator: AllNotIn # Retorna verdadeiro se não encontrar livenessProbe nos elementos do container
+              value: "{{ element.keys(@)[] }}"
+            - key: startupProbe
+              operator: AllNotIn
+              value: "{{ element.keys(@)[] }}"
+            - key: readinessProbe
+              operator: AllNotIn
+              value: "{{ element.keys(@)[] }}"
+```
+
 
 # Vantagens de usar Kyverno ✅
   ## Validação:
